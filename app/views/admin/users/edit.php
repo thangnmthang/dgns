@@ -14,7 +14,7 @@
     <?php endif; ?>
     
     <div class="p-6">
-        <form action="<?= $GLOBALS['config']['base_url'] ?>admin/users/update/<?= $user['id'] ?>" method="POST">
+        <form action="<?= $GLOBALS['config']['base_url'] ?>admin/users/edit/<?= $user['id'] ?>" method="POST">
             <div class="mb-4">
                 <label for="name" class="block text-gray-700 text-sm font-bold mb-2">Tên người dùng</label>
                 <input type="text" name="name" id="name" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" value="<?= htmlspecialchars($user['name']) ?>" required>
