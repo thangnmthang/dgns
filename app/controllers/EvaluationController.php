@@ -242,10 +242,13 @@ class EvaluationController extends \Core\Controller
         ];
 
         $sheet->getDefaultRowDimension()->setRowHeight(-1);
-        $sheet->getStyle('A1:F100')->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
-        foreach (range('A', 'E') as $col) {
-            $sheet->getColumnDimension($col)->setAutoSize(true);
-        }
+        $sheet->getStyle('A1:F100')->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_CENTER);
+
+        $sheet->getColumnDimension('A')->setWidth(15); // STT
+        $sheet->getColumnDimension('B')->setWidth(100); // TIÊU CHÍ ĐÁNH GIÁ
+        $sheet->getColumnDimension('C')->setWidth(15); // ĐIỂM TỐI ĐA
+        $sheet->getColumnDimension('D')->setWidth(15); // ĐIỂM CV, NLV TỰ CHẤM
+        $sheet->getColumnDimension('E')->setWidth(15);
 
         // ========== Header ==========
         $sheet->mergeCells('A1:C1')->setCellValue('A1', 'BỘ KHOA HỌC VÀ CÔNG NGHỆ');
@@ -278,15 +281,21 @@ class EvaluationController extends \Core\Controller
         foreach ($mappingData as $item) {
             $sttRow = strtoupper($this->roman($stt++));
             $sheet->setCellValue("A{$row}", $sttRow);
-            $sheet->setCellValue("B{$row}", $item['title']);
+            // Căn giữa ô chứa số thứ tự
+            $sheet->getStyle("A{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            // Loại bỏ số La Mã và dấu chấm cùng khoảng trắng khỏi tiêu đề
+            $titleWithoutRoman = preg_replace('/^[IVXLCDM]+\.\s/', '', $item['title']);
+            $sheet->setCellValue("B{$row}", $titleWithoutRoman);
             $sheet->setCellValue("C{$row}", $item['total_max_score']);
             $sheet->setCellValue("D{$row}", $item['total_self_score']);
             $sheet->setCellValue("E{$row}", $item['total_director_score']);
-            $sheet->getStyle("A{$row}:E{$row}")->applyFromArray($bold + $borderAll);
+            $sheet->getStyle("A{$row}:E{$row}")->applyFromArray($bold + $borderAll)->getAlignment()->setWrapText(true);
             $row++;
 
             foreach ($item['criteria'] as $key => $criteria) {
                 $sheet->setCellValue("A{$row}", is_numeric($key) ? $key + 1 : $key);
+                // Căn giữa ô chứa số thứ tự
+                $sheet->getStyle("A{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
                 $sheet->setCellValue("B{$row}", $criteria['text']);
                 $sheet->setCellValue("C{$row}", $criteria['max_score']);
                 $sheet->setCellValue("D{$row}", $criteria['self_score']);
@@ -315,19 +324,19 @@ class EvaluationController extends \Core\Controller
         $sheet->setCellValue("C{$row}", 100);
         $sheet->setCellValue("D{$row}", $totalSelfScoreAll);
         $sheet->setCellValue("E{$row}", $evaluation['director_rescore_total'] ?? '');
-        $sheet->getStyle("A{$row}:E{$row}")->applyFromArray($bold + $borderAll);
+        $sheet->getStyle("A{$row}:E{$row}")->applyFromArray($bold + $borderAll)->getAlignment()->setWrapText(true);
         $row++;
 
         $sheet->setCellValue("B{$row}", 'TỔNG SỐ ĐIỂM CHÍNH THỨC');
         $sheet->setCellValue("C{$row}", 100);
         $sheet->setCellValue("D{$row}", $totalSelfScoreAll - $evaluation['extra_deduction']);
         $sheet->setCellValue("E{$row}", $evaluation['director_rescore_final'] ?? '');
-        $sheet->getStyle("A{$row}:E{$row}")->applyFromArray($bold + $borderAll);
+        $sheet->getStyle("A{$row}:E{$row}")->applyFromArray($bold + $borderAll)->getAlignment()->setWrapText(true);
         $row++;
 
         // ========== Xếp loại ==========
         $sheet->mergeCells("A{$row}:E{$row}")->setCellValue("A{$row}", 'KẾT QUẢ XẾP LOẠI');
-        $sheet->getStyle("A{$row}")->applyFromArray($bold);
+        $sheet->getStyle("A{$row}")->applyFromArray($bold)->getAlignment()->setWrapText(true);
         $row++;
 
         $bold = [
@@ -347,12 +356,12 @@ class EvaluationController extends \Core\Controller
         // Tổng điểm chính thức
         $sheet->mergeCells("C{$row}:D{$row}");
         $sheet->setCellValue("C{$row}", 'Tổng số điểm chính thức');
-        $sheet->getStyle("C{$row}:D{$row}")->applyFromArray($bold + $borderAll)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getStyle("C{$row}:D{$row}")->applyFromArray($bold + $borderAll)->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_CENTER)->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
         // Kết quả xếp loại
         $sheet->mergeCells("E{$row}:E{$row}");
         $sheet->setCellValue("E{$row}", 'Kết quả xếp loại (đánh dấu)');
-        $sheet->getStyle("E{$row}:E{$row}")->applyFromArray($bold + $borderAll)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getStyle("E{$row}:E{$row}")->applyFromArray($bold + $borderAll)->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_CENTER)->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
         // Dòng 2
         $row++;
@@ -386,13 +395,13 @@ class EvaluationController extends \Core\Controller
         $finalScore = $evaluation['director_rescore_final'];
 
         if ($finalScore >= 95 && $dutyScore >= 5) {
-            $rank1 = ['Hoàn thành xuất sắc nhiệm vụ', '', $totalSelfScoreAll, $evaluation['director_rescore_final'], 'x'];
+            $rank1 = ['Hoàn thành xuất sắc nhiệm vụ', '', $totalSelfScoreAll - $evaluation['extra_deduction'], $evaluation['director_rescore_final'], 'x'];
         } elseif ($finalScore >= 80 && $dutyScore >= 4) {
-            $rank2 = ['Hoàn thành tốt nhiệm vụ', '', $totalSelfScoreAll, $evaluation['director_rescore_final'], 'x'];
+            $rank2 = ['Hoàn thành tốt nhiệm vụ', '', $totalSelfScoreAll - $evaluation['extra_deduction'], $evaluation['director_rescore_final'], 'x'];
         } elseif ($finalScore >= 50 && $dutyScore >= 3) {
-            $rank3 = ['Hoàn thành nhiệm vụ', '', $totalSelfScoreAll, $evaluation['director_rescore_final'], 'x'];
+            $rank3 = ['Hoàn thành nhiệm vụ', '', $totalSelfScoreAll - $evaluation['extra_deduction'], $evaluation['director_rescore_final'], 'x'];
         } else {
-            $rank4 = ['Không hoàn thành nhiệm vụ', '', $totalSelfScoreAll, $evaluation['director_rescore_final'], 'x'];
+            $rank4 = ['Không hoàn thành nhiệm vụ', '', $totalSelfScoreAll - $evaluation['extra_deduction'], $evaluation['director_rescore_final'], 'x'];
         }
 
         $ranking = [
@@ -404,7 +413,7 @@ class EvaluationController extends \Core\Controller
 
         foreach ($ranking as $rankRow) {
             $sheet->fromArray($rankRow, null, "A{$row}");
-            $sheet->getStyle("A{$row}:E{$row}")->applyFromArray($bold + $borderAll);
+            $sheet->getStyle("A{$row}:E{$row}")->applyFromArray($bold + $borderAll)->getAlignment()->setWrapText(true);
             $row++;
         }
 
@@ -466,7 +475,7 @@ class EvaluationController extends \Core\Controller
                     $sheet->getStyle("C{$row}")->applyFromArray([
                         'font'      => ['bold' => false],
                         'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT],
-                    ]);
+                    ])->getAlignment()->setWrapText(true);
                     $row++;
                 }
 
@@ -480,7 +489,7 @@ class EvaluationController extends \Core\Controller
                             'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_JUSTIFY,
                             'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
                         ],
-                    ]);
+                    ])->getAlignment()->setWrapText(true);
                     $row++;
                 }
 
@@ -497,7 +506,7 @@ class EvaluationController extends \Core\Controller
                             'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
                             'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
                         ],
-                    ]);
+                    ])->getAlignment()->setWrapText(true);
                     $row++;
                 }
 
@@ -514,7 +523,7 @@ class EvaluationController extends \Core\Controller
                             'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
                             'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
                         ],
-                    ]);
+                    ])->getAlignment()->setWrapText(true);
                     $row += 2; // Khoảng cách trước người tiếp theo
                 }
             }
@@ -772,7 +781,7 @@ class EvaluationController extends \Core\Controller
 
         // Lưu vào DB sử dụng form đánh giá theo phòng ban
         $evaluationModel = $this->model('Evaluation');
-        $success         = $evaluationModel->createEvaluationWithForm(Auth::user()['id'], $content, $departmentId,$employee_rescore_total,$employee_rescore_final,$extra_deduction);
+        $success         = $evaluationModel->createEvaluationWithForm(Auth::user()['id'], $content, $departmentId, $employee_rescore_total, $employee_rescore_final, $extra_deduction);
 
         if ($success) {
             $_SESSION['success'] = 'Đã gửi đánh giá thành công';
@@ -1144,7 +1153,7 @@ class EvaluationController extends \Core\Controller
     public function directorSaveComment($id)
     {
         Auth::requireRole('giam_doc');
-        
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $comment = $_POST['director_comment'] ?? '';
             $action  = $_POST['action'] ?? '';
@@ -1542,7 +1551,7 @@ class EvaluationController extends \Core\Controller
             if ($evaluation['status'] === 'deputy_reviewed') {
                 $success = $evaluationModel->updateDeputyDirectorComment($id, $comment);
             } else {
-                $success = $evaluationModel->updateStatusAndDeputyDirectorComment($id, 'deputy_reviewed', $comment, $rescore,$extra_deduction);
+                $success = $evaluationModel->updateStatusAndDeputyDirectorComment($id, 'deputy_reviewed', $comment, $rescore, $extra_deduction);
             }
 
             if ($success) {

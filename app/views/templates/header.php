@@ -74,12 +74,12 @@
                                         <span>Quản lý phòng ban</span>
                                     </a>
                                 </li>
-                                <li>
+                                <!-- <li>
                                     <a href="<?= $config['base_url'] ?>admin/evaluation-forms" class="flex items-center text-white hover:text-indigo-200 transition duration-150">
                                         <i class="fas fa-file-alt mr-2"></i>
                                         <span>Quản lý form đánh giá</span>
                                     </a>
-                                </li>
+                                </li> -->
                             <?php endif; ?>
                             
                             <!-- User profile dropdown -->
