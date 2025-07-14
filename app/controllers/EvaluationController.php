@@ -44,19 +44,19 @@ class EvaluationController extends \Core\Controller
             header('Location: ' . $GLOBALS['config']['base_url'] . 'login');
             exit;
         }
-
+    
         $evaluationModel = $this->model('Evaluation');
         $evaluation      = $evaluationModel->getEvaluationById($id);
         $userId          = Auth::user()['id'];
-
+    
         // Lấy mẫu form đánh giá phù hợp
         $formModel = $this->model('EvaluationForm');
         $formData  = null;
-
+    
         // Xác định loại form (lãnh đạo hoặc chuyên viên)
         $evaluationContent = json_decode($evaluation['content'], true);
         $formType          = isset($evaluationContent['part3_level_1']) ? 'lanh_dao' : 'nhan_vien';
-
+    
         if (! empty($evaluation['department_id'])) {
             // Lấy form đánh giá của phòng ban
             $form = $formModel->getFormByDepartmentId($evaluation['department_id'], $formType);
@@ -64,9 +64,8 @@ class EvaluationController extends \Core\Controller
                 $formData = json_decode($form['content'], true);
             }
         }
-
+    
         foreach ($formData['sections'] as $sectionIndex => $section) {
-
             if (isset($section['criteria'])) {
                 foreach ($section['criteria'] as $criteriaIndex => $criteria) {
                     if (isset($criteria['max_score'])) {
@@ -75,7 +74,7 @@ class EvaluationController extends \Core\Controller
                 }
             }
         }
-
+    
         function removeExamples(&$array)
         {
             foreach ($array as &$section) {
@@ -88,7 +87,7 @@ class EvaluationController extends \Core\Controller
                 }
             }
         }
-
+    
         function removeTextEnd($textNumber)
         {
             if (substr($textNumber, -1) === ' + ') {
@@ -97,138 +96,117 @@ class EvaluationController extends \Core\Controller
             }
             return $textNumber;
         }
-
+    
         function convertUsersToSignatures(array $users): array
         {
             $signatures = [];
-
+    
             foreach ($users as $user) {
                 $signature = [
                     'label'         => '', // mặc định rỗng, bạn có thể tùy chỉnh theo role
                     'comment_lines' => 3,  // mặc định 3 dòng
                     'name'          => $user['name'] ?? '',
                     'position'      => strtoupper($user['position'] ?? ''),
+                    'role'          => $user['role'] ?? '', // thêm role để xác định comment
                 ];
-
+    
                 // Gán nhãn (label) tùy theo role
                 switch ($user['role']) {
                     case 'lanh_dao':
-                        $signature['label'] = $user['employee_unit'] . ' nhận xét';
+                        $signature['label'] = 'Lãnh đạo phòng/Phụ trách phòng nhận xét';
                         break;
                     case 'pho_giam_doc':
-                        $signature['label'] = $user['employee_unit'] . ' nhận xét';
+                        $signature['label'] = 'Phó Giám đốc phụ trách phòng/đơn vị nhận xét';
                         break;
                     case 'giam_doc':
-                        $signature['label']         = $user['employee_unit'] . ' nhận xét';
+                        $signature['label']         = 'Ý KIẾN NHẬN XÉT CỦA GIÁM ĐỐC TRUNG TÂM';
                         $signature['comment_lines'] = 0; // không cần dòng nhận xét
                         break;
                     default:
                         $signature['label'] = '';
                 }
-
+    
                 $signatures[] = $signature;
             }
-
+    
             return $signatures;
         }
-
+    
         function attachScoresToCriteria(&$sections, $input1, $input2, &$totalMaxScoreAll, &$totalSelfScoreAll, &$totalDirectorScoreAll)
         {
             $scores1 = $input1['criteria'] ?? [];
             $scores2 = $input2;
-
+    
             // Khởi tạo tổng toàn bộ
             $totalMaxScoreAll      = 0;
             $totalSelfScoreAll     = 0;
             $totalDirectorScoreAll = 0;
-
+    
             foreach ($sections as &$section) {
                 if (! isset($section['criteria']) || ! is_array($section['criteria'])) {
                     continue;
                 }
-
+    
                 $totalMax      = 0;
                 $totalSelf     = 0;
                 $totalDirector = 0;
-
+    
                 foreach ($section['criteria'] as &$criterion) {
                     $id = $criterion['id'];
-
+    
                     // Gắn self_score
                     if (isset($scores1[$id])) {
                         $criterion['self_score'] = $scores1[$id]['score'];
                     }
-
+    
                     // Gắn director_score
                     if (isset($scores2[$id])) {
                         $criterion['director_score'] = $scores2[$id];
                     }
-
+    
                     // Cộng điểm từng loại
                     $totalMax += $criterion['max_score'] ?? 0;
                     $totalSelf += $criterion['self_score'] ?? 0;
                     $totalDirector += $criterion['director_score'] ?? 0;
                 }
-
+    
                 // Gán tổng điểm vào section
                 $section['total_max_score']      = $totalMax;
                 $section['total_self_score']     = $totalSelf;
                 $section['total_director_score'] = $totalDirector;
-
+    
                 // Cộng dồn tổng toàn bộ
                 $totalMaxScoreAll += $totalMax;
                 $totalSelfScoreAll += $totalSelf;
                 $totalDirectorScoreAll += $totalDirector;
             }
-
+    
             return $sections;
         }
-
+    
         // Gọi hàm:
         $data = removeExamples($formData['sections']); // $data là mảng bạn đang có
-
-        // Nếu muốn in ra kết quả để kiểm tra:
+    
         $dataVoteContent       = json_decode($evaluation['content'], true);
         $directorRescore       = json_decode($evaluation['director_rescore'], true);
         $totalMaxScoreAll      = 0;
         $totalSelfScoreAll     = 0;
         $totalDirectorScoreAll = 0;
-
+    
         $mappingData = attachScoresToCriteria($formData['sections'], $dataVoteContent, $directorRescore, $totalMaxScoreAll, $totalSelfScoreAll, $totalDirectorScoreAll);
-
-        // echo '<pre>';
-        // print_r($totalMaxScoreAll);
-        // echo '</pre>';
-
-        // echo '<pre>';
-        // print_r($totalSelfScoreAll);
-        // echo '</pre>';
-
-        // echo '<pre>';
-        // print_r($evaluation['director_rescore_final']);
-        // echo '</pre>';
-
-        // echo '<pre>';
-        // print_r($mappingData);die;
-        // echo '</pre>';
-
-        // echo '<pre>';
-        // print_r($evaluation);die;
-        // echo '</pre>';
-
+    
         if (! $evaluation) {
             $_SESSION['error'] = 'Không tìm thấy bản đánh giá';
             header('Location: ' . $GLOBALS['config']['base_url'] . 'dashboard');
             exit;
         }
-
-        // echo "<pre>";
-        // print_r($userData);die;
-        // echo "</pre>";
-
+    
         $spreadsheet = new Spreadsheet();
         $sheet       = $spreadsheet->getActiveSheet();
-
+    
+        // Đặt font chữ Times New Roman cho toàn bộ file
+        $spreadsheet->getDefaultStyle()->getFont()->setName('Times New Roman');
+    
         // ========== Styling ==========
         $bold      = ['font' => ['bold' => true]];
         $center    = ['alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]];
@@ -240,31 +218,31 @@ class EvaluationController extends \Core\Controller
                 ],
             ],
         ];
-
+    
         $sheet->getDefaultRowDimension()->setRowHeight(-1);
         $sheet->getStyle('A1:F100')->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_CENTER);
-
+    
         $sheet->getColumnDimension('A')->setWidth(15); // STT
         $sheet->getColumnDimension('B')->setWidth(100); // TIÊU CHÍ ĐÁNH GIÁ
         $sheet->getColumnDimension('C')->setWidth(15); // ĐIỂM TỐI ĐA
         $sheet->getColumnDimension('D')->setWidth(15); // ĐIỂM CV, NLV TỰ CHẤM
         $sheet->getColumnDimension('E')->setWidth(15);
-
+    
         // ========== Header ==========
         $sheet->mergeCells('A1:C1')->setCellValue('A1', 'BỘ KHOA HỌC VÀ CÔNG NGHỆ');
         $sheet->mergeCells('D1:E1')->setCellValue('D1', 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM');
         $sheet->mergeCells('A2:C2')->setCellValue('A2', 'TRUNG TÂM CHỨNG THỰC ĐIỆN TỬ QUỐC GIA');
         $sheet->mergeCells('D2:E2')->setCellValue('D2', 'Độc lập - Tự do - Hạnh phúc');
-
+    
         $sheet->mergeCells('A4:E4')->setCellValue('A4', 'BÁO CÁO ĐÁNH GIÁ KẾT QUẢ ĐÁNH GIÁ CỦA CÁ NHÂN');
         $sheet->mergeCells('A5:E5')->setCellValue('A5', 'Kỳ đánh giá: ' . date("Y"));
         $sheet->getStyle("A4:E4")->applyFromArray($bold)->getAlignment()->setWrapText(true)->setHorizontal(Alignment::HORIZONTAL_CENTER);
         $sheet->getStyle("A5:E5")->applyFromArray($bold)->getAlignment()->setWrapText(true)->setHorizontal(Alignment::HORIZONTAL_CENTER);
-
+    
         $sheet->setCellValue('A7', 'Họ và tên:')->setCellValue('B7', $evaluation['employee_name']);
         $sheet->setCellValue('A8', 'Chức vụ:')->setCellValue('B8', $evaluation['employee_title'] ?? 'Chuyên viên');
         $sheet->setCellValue('A9', 'Đơn vị công tác:')->setCellValue('B9', $evaluation['employee_unit'] ?? 'Chưa xác định');
-
+    
         // ========== Table Header ==========
         $startRow = 11;
         $headers  = ['STT', 'TIÊU CHÍ ĐÁNH GIÁ', 'ĐIỂM TỐI ĐA', 'ĐIỂM CV, NLV TỰ CHẤM', 'ĐIỂM THỰC TẾ ĐẠT ĐƯỢC'];
@@ -273,7 +251,7 @@ class EvaluationController extends \Core\Controller
             $sheet->setCellValue($col . $startRow, $header);
         }
         $sheet->getStyle("A{$startRow}:E{$startRow}")->applyFromArray($bold + $center + $borderAll);
-
+    
         // ========== Nội dung bảng ==========
         $row        = $startRow + 1;
         $stt        = 1;
@@ -281,9 +259,7 @@ class EvaluationController extends \Core\Controller
         foreach ($mappingData as $item) {
             $sttRow = strtoupper($this->roman($stt++));
             $sheet->setCellValue("A{$row}", $sttRow);
-            // Căn giữa ô chứa số thứ tự
             $sheet->getStyle("A{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-            // Loại bỏ số La Mã và dấu chấm cùng khoảng trắng khỏi tiêu đề
             $titleWithoutRoman = preg_replace('/^[IVXLCDM]+\.\s/', '', $item['title']);
             $sheet->setCellValue("B{$row}", $titleWithoutRoman);
             $sheet->setCellValue("C{$row}", $item['total_max_score']);
@@ -291,34 +267,21 @@ class EvaluationController extends \Core\Controller
             $sheet->setCellValue("E{$row}", $item['total_director_score']);
             $sheet->getStyle("A{$row}:E{$row}")->applyFromArray($bold + $borderAll)->getAlignment()->setWrapText(true);
             $row++;
-
+    
             foreach ($item['criteria'] as $key => $criteria) {
                 $sheet->setCellValue("A{$row}", is_numeric($key) ? $key + 1 : $key);
-                // Căn giữa ô chứa số thứ tự
                 $sheet->getStyle("A{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
                 $sheet->setCellValue("B{$row}", $criteria['text']);
                 $sheet->setCellValue("C{$row}", $criteria['max_score']);
                 $sheet->setCellValue("D{$row}", $criteria['self_score']);
                 $sheet->setCellValue("E{$row}", $criteria['director_score']);
-                // if ($key === 'total') {
-                //     $sheet->setCellValue("D{$row}", $evaluationData['total_score'] ?? '');
-                // } elseif ($partKey === 'part3' && $isManager) {
-                //     if ($key === 'level1') {
-                //         $sheet->setCellValue("D{$row}", $evaluationData['part3_level_1'] ?? '');
-                //     }
-                //     if ($key === 'level2') {
-                //         $sheet->setCellValue("D{$row}", $evaluationData['part3_level_2'] ?? '');
-                //     }
-                // } else {
-                //     $sheet->setCellValue("D{$row}", $evaluationData['criteria'][$key]['self_score'] ?? '');
-                // }
                 $sheet->getStyle("A{$row}:E{$row}")->applyFromArray($borderAll);
                 $row++;
             }
-
+    
             $textNumber[] = $sttRow;
         }
-
+    
         // ========== Tổng kết điểm ==========
         $sheet->setCellValue("B{$row}", 'Tổng số điểm đạt được ' . implode(' + ', $textNumber));
         $sheet->setCellValue("C{$row}", 100);
@@ -326,74 +289,62 @@ class EvaluationController extends \Core\Controller
         $sheet->setCellValue("E{$row}", $evaluation['director_rescore_total'] ?? '');
         $sheet->getStyle("A{$row}:E{$row}")->applyFromArray($bold + $borderAll)->getAlignment()->setWrapText(true);
         $row++;
-
+    
         $sheet->setCellValue("B{$row}", 'TỔNG SỐ ĐIỂM CHÍNH THỨC');
         $sheet->setCellValue("C{$row}", 100);
         $sheet->setCellValue("D{$row}", $totalSelfScoreAll - $evaluation['extra_deduction']);
         $sheet->setCellValue("E{$row}", $evaluation['director_rescore_final'] ?? '');
         $sheet->getStyle("A{$row}:E{$row}")->applyFromArray($bold + $borderAll)->getAlignment()->setWrapText(true);
         $row++;
-
+    
         // ========== Xếp loại ==========
         $sheet->mergeCells("A{$row}:E{$row}")->setCellValue("A{$row}", 'KẾT QUẢ XẾP LOẠI');
         $sheet->getStyle("A{$row}")->applyFromArray($bold)->getAlignment()->setWrapText(true);
         $row++;
-
+    
         $bold = [
             'font' => ['bold' => true],
         ];
-
-        // Gộp ô phần tiêu đề chính
+    
         $sheet->mergeCells("A{$row}:A" . ($row + 1));
         $sheet->setCellValue("A{$row}", 'Xếp loại mức độ hoàn thành nhiệm vụ');
         $sheet->getStyle("A{$row}")->applyFromArray($bold + $borderAll)->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_CENTER)->setHorizontal(Alignment::HORIZONTAL_CENTER);
-
-        // Cột khung điểm
+    
         $sheet->mergeCells("B{$row}:B" . ($row + 1));
         $sheet->setCellValue("B{$row}", 'Khung điểm');
         $sheet->getStyle("B{$row}")->applyFromArray($bold + $borderAll)->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_CENTER)->setHorizontal(Alignment::HORIZONTAL_CENTER);
-
-        // Tổng điểm chính thức
+    
         $sheet->mergeCells("C{$row}:D{$row}");
         $sheet->setCellValue("C{$row}", 'Tổng số điểm chính thức');
         $sheet->getStyle("C{$row}:D{$row}")->applyFromArray($bold + $borderAll)->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_CENTER)->setHorizontal(Alignment::HORIZONTAL_CENTER);
-
-        // Kết quả xếp loại
+    
         $sheet->mergeCells("E{$row}:E{$row}");
         $sheet->setCellValue("E{$row}", 'Kết quả xếp loại (đánh dấu)');
         $sheet->getStyle("E{$row}:E{$row}")->applyFromArray($bold + $borderAll)->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_CENTER)->setHorizontal(Alignment::HORIZONTAL_CENTER);
-
-        // Dòng 2
+    
         $row++;
         $sheet->setCellValue("C{$row}", 'Điểm cá nhân tự chấm');
         $sheet->setCellValue("D{$row}", 'Người có thẩm quyền chấm');
-        //$sheet->mergeCells("E{$row}:E{$row}");
         $sheet->setCellValue("E{$row}", 'Cá nhân tự xếp loại');
         $sheet->getStyle("C{$row}:E{$row}")->applyFromArray($bold + $borderAll)->getAlignment()->setWrapText(true)->setHorizontal(Alignment::HORIZONTAL_CENTER);
-
-        // Gộp các ô còn lại
+    
         $row++;
         $rank1 = ['Hoàn thành xuất sắc nhiệm vụ', '', '', '', ''];
         $rank2 = ['Hoàn thành tốt nhiệm vụ', '', '', '', ''];
         $rank3 = ['Hoàn thành nhiệm vụ', '', '', '', '', ''];
         $rank4 = ['Không hoàn thành nhiệm vụ', '', '', '', ''];
-        // Get the director_rescore data
+    
         $directorRescoreData = json_decode($evaluation['director_rescore'], true);
-
-        // Get the last criteria value (dutyScore)
         $dutyScore = 0;
         if (!empty($directorRescoreData)) {
-            // Find the last criteria by getting the highest criteria number
             $lastCriteriaKey = max(array_map(function ($key) {
                 return (int)str_replace('criteria_', '', $key);
             }, array_keys($directorRescoreData)));
-
-            // Set dutyScore to the value of the last criteria
             $lastCriteriaId = 'criteria_' . $lastCriteriaKey;
             $dutyScore = isset($directorRescoreData[$lastCriteriaId]) ? (float)$directorRescoreData[$lastCriteriaId] : 0;
         }
         $finalScore = $evaluation['director_rescore_final'];
-
+    
         if ($finalScore >= 95 && $dutyScore >= 5) {
             $rank1 = ['Hoàn thành xuất sắc nhiệm vụ', '', $totalSelfScoreAll - $evaluation['extra_deduction'], $evaluation['director_rescore_final'], 'x'];
         } elseif ($finalScore >= 80 && $dutyScore >= 4) {
@@ -403,29 +354,29 @@ class EvaluationController extends \Core\Controller
         } else {
             $rank4 = ['Không hoàn thành nhiệm vụ', '', $totalSelfScoreAll - $evaluation['extra_deduction'], $evaluation['director_rescore_final'], 'x'];
         }
-
+    
         $ranking = [
             $rank1,
             $rank2,
             $rank3,
             $rank4,
         ];
-
+    
         foreach ($ranking as $rankRow) {
             $sheet->fromArray($rankRow, null, "A{$row}");
             $sheet->getStyle("A{$row}:E{$row}")->applyFromArray($bold + $borderAll)->getAlignment()->setWrapText(true);
             $row++;
         }
-
+    
         // ========== Phần ký tên ==========
         $sheet->getStyle("E{$row}")->applyFromArray($bold)->getAlignment()->setWrapText(true)->setHorizontal(Alignment::HORIZONTAL_CENTER);
         $sheet->setCellValue("E{$row}", 'Hà Nội, ngày ... tháng ... năm ' . date("Y"));
         $row++;
-
+    
         $signatureTitles = [
             'NGƯỜI TỰ ĐÁNH GIÁ' => $evaluation['employee_name'],
         ];
-
+    
         foreach ($signatureTitles as $title => $name) {
             $sheet->getStyle("E{$row}")->applyFromArray($bold)->getAlignment()->setWrapText(true)->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $sheet->setCellValue("E{$row}", $title);
@@ -434,39 +385,20 @@ class EvaluationController extends \Core\Controller
             $sheet->setCellValue("E{$row}", $name);
             $row += 2;
         }
-
+    
         // ========== Lãnh đạo nhận xét ==========
         $dataSignatures = $evaluation['signatures'] ?? [];
-
         if (! empty($dataSignatures)) {
-
             $dataSignaturesDecode = json_decode($dataSignatures, true);
-
             $signatures = convertUsersToSignatures($dataSignaturesDecode);
-
-            //print_r($dataSignaturesDecode);die;
-
-            // $signatures = [
-            //     [
-            //         'label'         => 'Lãnh đạo phòng/Phụ trách phòng nhận xét',
-            //         'comment_lines' => 3,
-            //         'name'          => 'Nguyễn Công Doanh',
-            //         'position'      => 'TRƯỞNG PHÒNG',
-            //     ],
-            //     [
-            //         'label'         => 'Phó Giám đốc/đơn vị nhận xét',
-            //         'comment_lines' => 3,
-            //         'name'          => 'Nguyễn Đức Mạnh',
-            //         'position'      => 'PHÓ GIÁM ĐỐC',
-            //     ],
-            //     [
-            //         'label'         => '',
-            //         'comment_lines' => 0,
-            //         'name'          => 'Đinh Quang Trung',
-            //         'position'      => '',
-            //     ],
-            // ];
-
+    
+            // Định nghĩa ánh xạ từ role sang trường comment
+            $commentFields = [
+                'lanh_dao' => 'manager_comment',
+                'pho_giam_doc' => 'deputy_director_comment',
+                'giam_doc' => 'director_comment',
+            ];
+    
             foreach ($signatures as $sig) {
                 // Label: Lãnh đạo phòng/Phụ trách phòng nhận xét...
                 if (! empty($sig['label'])) {
@@ -478,24 +410,25 @@ class EvaluationController extends \Core\Controller
                     ])->getAlignment()->setWrapText(true);
                     $row++;
                 }
-
-                // Gạch dòng chấm để viết comment
-                for ($i = 0; $i < $sig['comment_lines']; $i++) {
+    
+                // Thêm nhận xét thực tế nếu có
+                if (isset($commentFields[$sig['role']]) && !empty($evaluation[$commentFields[$sig['role']]])) {
+                    $comment = $evaluation[$commentFields[$sig['role']]];
                     $sheet->mergeCells("C{$row}:E{$row}");
-                    $sheet->setCellValue("C{$row}", str_repeat('. ', 50)); // mỗi ". " là khoảng cách 2 ký tự
+                    $sheet->setCellValue("C{$row}", $comment);
                     $sheet->getStyle("C{$row}")->applyFromArray([
                         'font'      => ['size' => 10],
                         'alignment' => [
-                            'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_JUSTIFY,
-                            'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                            'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT,
+                            'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP,
                         ],
                     ])->getAlignment()->setWrapText(true);
                     $row++;
                 }
-
+    
                 // Chừa khoảng trống 2 dòng để ký tay
                 $row += 2;
-
+    
                 // Position (TRƯỞNG PHÒNG, PHÓ GIÁM ĐỐC...)
                 if (! empty($sig['position'])) {
                     $sheet->mergeCells("E{$row}:E{$row}");
@@ -509,11 +442,10 @@ class EvaluationController extends \Core\Controller
                     ])->getAlignment()->setWrapText(true);
                     $row++;
                 }
-
-                // Chừa thêm khoảng trống 2 dòng để ký tay dưới chức vụ
+    
+                // Chừa thêm khoảng trống 4 dòng để ký tay dưới chức vụ
                 $row += 4;
-
-                // Name (Nguyễn Công Doanh...)
+    
                 if (! empty($sig['name'])) {
                     $sheet->mergeCells("E{$row}:E{$row}");
                     $sheet->setCellValue("E{$row}", $sig['name']);
@@ -528,16 +460,18 @@ class EvaluationController extends \Core\Controller
                 }
             }
         }
+    
         // ========== Xuất file ==========
         $filename = 'bao_cao_danh_gia_' . $id . '_' . date('Ymd_His') . '.xlsx';
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
         header('Cache-Control: max-age=0');
-
+    
         $writer = new Xlsx($spreadsheet);
         $writer->save('php://output');
         exit;
     }
+    
 
     // Helper hàm đổi số sang La Mã
     public function roman($num)
